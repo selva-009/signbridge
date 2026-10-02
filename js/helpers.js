@@ -55,6 +55,17 @@ export function resumeSpeech() { try { window.speechSynthesis.resume(); } catch 
 export function stopSpeech() { try { window.speechSynthesis.cancel(); } catch { /* noop */ } }
 export function isSpeaking() { try { return window.speechSynthesis.speaking; } catch { return false; } }
 
+/* Warm the voice list. Some browsers populate it asynchronously, and iOS needs
+   the first speak() to come from a user gesture — so we nudge it early. */
+export function warmUpVoices() {
+  if (!speechAvailable()) return;
+  try {
+    const load = () => { try { window.speechSynthesis.getVoices(); } catch { /* noop */ } };
+    load();
+    window.speechSynthesis.addEventListener?.("voiceschanged", load);
+  } catch { /* noop */ }
+}
+
 /* ---------------- formatting ---------------- */
 export function fmtTime(ts) {
   return new Date(ts).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
