@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0e1116" />
+<title>SignBridge — Sign Language Translator</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#171b22; --panel2:#1f242e; --line:#2a3140;
+    --text:#e8edf4; --muted:#9aa4b2; --accent:#2d6cdf; --good:#43e07a;
+    --warn:#ffd24d; --bad:#ff5d5d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.4; padding:12px 12px 40px; max-width:640px; margin:0 auto;
+  }
+  h1{font-size:1.25rem;margin:4px 0 2px}
+  .sub{color:var(--muted);font-size:.82rem;margin:0 0 12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:12px}
+  .videoWrap{position:relative;width:100%;aspect-ratio:3/4;background:#000;border-radius:14px;overflow:hidden}
+  video,canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  canvas{pointer-events:none}
+  .status{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;font-size:.95rem}
+  .pill{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-weight:600}
+  #sign{color:var(--warn);font-size:1.4rem;font-weight:800;letter-spacing:.5px}
+  .sentence{font-size:1.5rem;font-weight:800;color:var(--good);min-height:2.2rem;word-break:break-word}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  button{
+    font:inherit;font-weight:700;border:0;border-radius:12px;padding:12px 14px;
+    background:var(--accent);color:#fff;cursor:pointer;flex:1;min-width:88px;
+  }
+  button.ghost{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+  button.small{flex:0 0 auto;padding:9px 12px;font-size:.85rem}
+  button:disabled{opacity:.45}
+  .lbl{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+  select,input{font:inherit;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:10px;padding:11px}
+  select{width:100%}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:.8rem}
+  .chip b{color:var(--good)}
+  .bigtext{font-size:2rem;font-weight:800;color:#fff;min-height:3rem;word-break:break-word;text-align:center;padding:8px 0}
+  details{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-bottom:12px}
+  summary{font-weight:700;cursor:pointer}
+  details p,details li{color:var(--muted);font-size:.88rem}
+  .hint{color:var(--muted);font-size:.8rem;margin-top:8px}
+  .bar{height:8px;background:var(--panel2);border-radius:999px;overflow:hidden;margin-top:8px}
+  .bar > i{display:block;height:100%;background:var(--good);width:0%}
+  .flash{outline:2px solid var(--good)}
+</style>
+</head>
+<body>
+  <h1>SignBridge</h1>
+  <p class="sub">Sign &rarr; text &amp; speech, right in your phone browser. No install.</p>
+
+  <div class="panel">
+    <div class="videoWrap">
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <div class="status">
+      <div>Sign: <span id="sign">…</span></div>
+      <div class="pill" id="conf">0%</div>
+    </div>
+    <div class="bar"><i id="confbar"></i></div>
+    <p class="hint" id="camHint">Tap “Start camera” and allow camera access.</p>
+    <div class="row" style="margin-top:10px">
+      <button id="startBtn">Start camera</button>
+      <button id="switchBtn" class="ghost" disabled>Flip camera</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="lbl">Your sentence</p>
+    <div class="sentence" id="sentence">></div>
+    <div class="row" style="margin-top:10px">
+      <button id="speakBtn" class="ghost">Speak</button>
+      <button id="spaceBtn" class="ghost">Space</button>
+      <button id="clearBtn" class="ghost">Clear</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="lbl">1 · Teach it a sign</p>
+    <select id="labelSelect"></select>
+    <div class="row" style="margin-top:10px">
+      <button id="recordBtn" disabled>Record sample</button>
+      <button id="undoBtn" class="ghost" disabled>Undo</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <p class="hint">Hold a sign steady, tap <b>Record sample</b> 5–10 times (vary the angle a little). Then hold the sign again — it types itself.</p>
+  </div>
+
+  <div class="panel">
+    <p class="lbl">Hearing person types here</p>
+    <div class="row">
+      <input id="typed" type="text" placeholder="Type a reply…" style="flex:1;min-width:0" />
+      <button id="showBtn" class="small">Show</button>
+    </div>
+    <div class="bigtext" id="bigtext"></div>
+  </div>
+
+  <details>
+    <summary>How to use it</summary>
+    <ol>
+      <li>Tap <b>Start camera</b> and allow access.</li>
+      <li>Pick a sign (a letter) from the list and hold that hand shape to the camera.</li>
+      <li>Tap <b>Record sample</b> 5–10 times for that sign. Repeat for other signs.</li>
+      <li>Now hold any taught sign steady for a moment — it is typed into your sentence.</li>
+      <li>Tap <b>Speak</b> to read it aloud.</li>
+    </ol>
+    <p>Everything runs on your phone. Your samples are saved in the browser, so they stay after a refresh. Recognition needs a good light and the whole hand in view.</p>
+  </details>
+
+<script type="module">
+import { FilesetResolver, HandLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+/* ---------------- config ---------------- */
+const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const K = 5;                 // neighbours for kNN
+const SMOOTH = 12;           // frames in the majority-vote window
+const CONF_THRESHOLD = 0.6;  // below this we show "…"
+const DWELL = 10;            // frames a sign must hold before it is typed
+const STORE_KEY = "signbridge.samples.v1";
+
+/* ---------------- state ---------------- */
+let handLandmarker = null;
+let stream = null, facing = "user", running = false, lastVideoTime = -1;
+let samples = [];            // [{label, f:[63]}]
+let recentFeats = [];        // rolling buffer for stable recording
+let history = [];            // recent smoothed labels
+let pending = null, dwellCount = 0, lastCommitted = null;
+let sentence = "";
+
+const $ = (id) => document.getElementById(id);
+const video = $("video"), canvas = $("overlay"), ctx = canvas.getContext("2d");
+
+/* ---------------- persistence ---------------- */
+function load(){ try{ samples = JSON.parse(localStorage.getItem(STORE_KEY)) || []; }catch(e){ samples = []; } }
+function save(){ try{ localStorage.setItem(STORE_KEY, JSON.stringify(samples)); }catch(e){} }
+
+/* ---------------- feature maths ---------------- */
+function toFeatures(lm){                    // lm: 21 {x,y,z}
+  const p0 = lm[0];
+  let arr = lm.map(p => [p.x - p0.x, p.y - p0.y, p.z - p0.z]);
+  let max = 0;
+  for(const [x,y,z] of arr) max = Math.max(max, Math.hypot(x,y,z));
+  if(max > 1e-6) arr = arr.map(([x,y,z]) => [x/max, y/max, z/max]);
+  return arr.flat();
+}
+function dist(a,b){ let s=0; for(let i=0;i<a.length;i++){ const d=a[i]-b[i]; s+=d*d; } return s; }
+function predict(f){
+  if(samples.length === 0) return {label:"…", conf:0};
+  const scored = samples.map(s => ({label:s.label, d:dist(f, s.f)}))
+                        .sort((a,b) => a.d - b.d).slice(0, Math.min(K, samples.length));
+  const votes = {};
+  scored.forEach(s => votes[s.label] = (votes[s.label]||0)+1);
+  let best = "…", n = 0;
+  for(const k in votes){ if(votes[k] > n){ n = votes[k]; best = k; } }
+  return {label: best, conf: n/scored.length};
+}
+function majority(list){
+  const c = {}; list.forEach(l => c[l] = (c[l]||0)+1);
+  let best=null,n=0; for(const k in c){ if(c[k]>n){ n=c[k]; best=k; } }
+  return {label:best, agree:n/list.length};
+}
+
+/* ---------------- hand connections for drawing ---------------- */
+const CONN = [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],
+              [9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
+
+/* ---------------- model ---------------- */
+async function initModel(){
+  const fileset = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  handLandmarker = await HandLandmarker.createFromOptions(fileset, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO", numHands: 1,
+    minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.5, minTrackingConfidence: 0.5
+  });
+}
+
+/* ---------------- camera ---------------- */
+async function startCamera(){
+  if(stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: facing, width:{ideal:1280}, height:{ideal:720} }, audio:false
+  });
+  video.srcObject = stream;
+  await video.play();
+  canvas.width = video.videoWidth || 480;
+  canvas.height = video.videoHeight || 640;
+  $("camHint").style.display = "none";
+  $("switchBtn").disabled = false;
+  $("recordBtn").disabled = false;
+  $("undoBtn").disabled = samples.length === 0;
+  if(!running){ running = true; loop(); }
+}
+
+/* ---------------- main loop ---------------- */
+function loop(){
+  requestAnimationFrame(loop);
+  if(!handLandmarker || video.readyState < 2) return;
+  if(video.currentTime === lastVideoTime) return;
+  lastVideoTime = video.currentTime;
+
+  let res;
+  try{ res = handLandmarker.detectForVideo(video, performance.now()); }catch(e){ return; }
+
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const has = res && res.landmarks && res.landmarks.length > 0;
+
+  if(has){
+    const lm = res.landmarks[0];
+    const f = toFeatures(lm);
+    recentFeats.push(f); if(recentFeats.length > 10) recentFeats.shift();
+
+    const {label, conf} = predict(f);
+    history.push(label); if(history.length > SMOOTH) history.shift();
+    const {label: voted, agree} = majority(history);
+
+    let shown = "…", showConf = conf;
+    if(agree >= 0.6 && conf >= CONF_THRESHOLD){ shown = voted; showConf = conf; }
+    setSign(shown, showConf);
+
+    // dwell -> type
+    if(shown !== "…"){
+      if(shown === pending) dwellCount++; else { pending = shown; dwellCount = 1; }
+      if(dwellCount === DWELL && shown !== lastCommitted){
+        sentence += shown; lastCommitted = shown; renderSentence(); buzz();
+      }
+    } else { pending = null; dwellCount = 0; }
+
+    drawHand(lm);
+  } else {
+    recentFeats.length = 0; history.length = 0;
+    pending = null; dwellCount = 0; lastCommitted = null;
+    setSign("…", 0);
+  }
+}
+
+function drawHand(lm){
+  const w = canvas.width, h = canvas.height;
+  ctx.lineWidth = Math.max(2, w/240); ctx.strokeStyle = "#43e07a"; ctx.fillStyle = "#ff5d5d";
+  const px = lm.map(p => [p.x*w, p.y*h]);
+  ctx.beginPath();
+  for(const [a,b] of CONN){ ctx.moveTo(px[a][0],px[a][1]); ctx.lineTo(px[b][0],px[b][1]); }
+  ctx.stroke();
+  for(const [x,y] of px){ ctx.beginPath(); ctx.arc(x,y,Math.max(3,w/120),0,7); ctx.fill(); }
+}
+
+/* ---------------- ui helpers ---------------- */
+function setSign(label, conf){
+  $("sign").textContent = label;
+  const pct = Math.round((conf||0)*100);
+  $("conf").textContent = pct + "%";
+  const bar = $("confbar");
+  bar.style.width = pct + "%";
+  bar.style.background = label === "…" ? "#ffd24d" : "#43e07a";
+}
+function renderSentence(){ $("sentence").textContent = ">" + sentence; }
+function buzz(){ if(navigator.vibrate) navigator.vibrate(20); }
+
+function renderChips(){
+  const counts = {};
+  samples.forEach(s => counts[s.label] = (counts[s.label]||0)+1);
+  const el = $("chips");
+  const entries = Object.entries(counts);
+  if(entries.length === 0){ el.innerHTML = '<span class="chip">No samples yet</span>'; return; }
+  el.innerHTML = entries.map(([k,v]) => `<span class="chip">${k} <b>${v}</b></span>`).join("");
+}
+
+/* ---------------- recording ---------------- */
+function record(){
+  if(recentFeats.length === 0){ flash("Hold your hand in view first"); return; }
+  // average the recent frames -> one stable sample
+  const n = recentFeats.length, mean = new Array(63).fill(0);
+  for(const f of recentFeats) for(let i=0;i<63;i++) mean[i] += f[i]/n;
+  samples.push({label: $("labelSelect").value, f: mean});
+  save(); renderChips(); $("undoBtn").disabled = false;
+  flash("Saved sample");
+}
+function undo(){ samples.pop(); save(); renderChips(); $("undoBtn").disabled = samples.length===0; }
+function flash(msg){
+  const h = $("camHint"); h.textContent = msg; h.style.display = "block"; h.classList.add("flash");
+  setTimeout(()=>{ h.classList.remove("flash"); if(msg==="Saved sample") h.style.display="none"; }, 900);
+}
+
+/* ---------------- wiring ---------------- */
+$("labelSelect").innerHTML = LETTERS.map(l => `<option value="${l}">${l}</option>`).join("");
+$("startBtn").onclick = async () => {
+  try{ if(!handLandmarker){ $("startBtn").disabled = true; $("startBtn").textContent="Loading model…"; await initModel(); }
+       $("startBtn").textContent = "Camera on"; await startCamera(); }
+  catch(e){ $("camHint").style.display="block"; $("camHint").textContent = "Camera error: " + e.message + " (camera needs HTTPS and permission)"; $("startBtn").disabled=false; $("startBtn").textContent="Start camera"; }
+};
+$("switchBtn").onclick = async () => { facing = facing === "user" ? "environment" : "user"; try{ await startCamera(); }catch(e){} };
+$("recordBtn").onclick = record;
+$("undoBtn").onclick = undo;
+$("speakBtn").onclick = () => { const t = sentence.trim(); if(!t) return; const u = new SpeechSynthesisUtterance(t); u.rate = 0.95; speechSynthesis.speak(u); };
+$("spaceBtn").onclick = () => { sentence += " "; renderSentence(); };
+$("clearBtn").onclick = () => { sentence = ""; lastCommitted = null; renderSentence(); };
+$("showBtn").onclick = () => { const t = $("typed").value.trim().toUpperCase(); if(!t) return; $("bigtext").textContent = t; $("typed").value = ""; };
+$("typed").addEventListener("keydown", e => { if(e.key === "Enter") $("showBtn").click(); });
+
+load(); renderChips(); renderSentence();
+</script>
+</body>
+</html>
