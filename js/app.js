@@ -4,7 +4,7 @@
    ========================================================================== */
 
 import { views } from "./views.js";
-import { stopSpeech } from "./helpers.js";
+import { stopSpeech, warmUpVoices } from "./helpers.js";
 
 const main = document.getElementById("main");
 let cleanup = null;
@@ -62,6 +62,10 @@ navToggle?.addEventListener("click", () => {
   const open = nav.classList.toggle("open");
   navToggle.setAttribute("aria-expanded", String(open));
 });
+
+/* Voice list can load asynchronously; warm it now and on the first tap. */
+warmUpVoices();
+window.addEventListener("pointerdown", warmUpVoices, { once: true });
 
 window.addEventListener("hashchange", route);
 window.addEventListener("DOMContentLoaded", route);
