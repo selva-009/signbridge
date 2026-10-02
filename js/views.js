@@ -166,6 +166,11 @@ export function live() {
             <button class="btn secondary" id="flipBtn" disabled>Flip camera</button>
           </div>
           <p class="field-hint" id="liveMsg" role="status"></p>
+          <div class="row" style="margin-top:12px;gap:8px">
+            <span class="badge" id="modelBadge">Model: idle</span>
+            <span class="badge" id="handBadge">Hand: —</span>
+            <span class="badge" id="taughtBadge">Signs taught: 0</span>
+          </div>
         </div>
 
         <div class="stack">
@@ -197,6 +202,15 @@ export function live() {
             </div>
           </div>
 
+          <div class="card">
+            <div class="small muted">Teach a sign — right here, no need to leave this page</div>
+            <div class="row" style="margin-top:8px">
+              <input id="teachName" type="text" placeholder="Sign name, e.g. HELLO" style="flex:1;min-width:0" autocomplete="off">
+              <button class="btn" id="teachBtn" disabled>Capture sample</button>
+            </div>
+            <p class="field-hint" id="teachMsg">Hold the sign steady, then tap Capture. Repeat 5–10 times, varying the angle slightly.</p>
+          </div>
+
           ${privacyNotice()}
         </div>
       </div>
@@ -205,6 +219,7 @@ export function live() {
       const video = $("#cam", root), canvas = $("#overlay", root);
       let session = null, sentence = "", pending = null, dwell = 0, lastCommitted = null, facing = "user";
       let lastRaw = null;
+      const recentFrames = [];
 
       const setMsg = (m) => { $("#liveMsg", root).textContent = m || ""; };
       const setCam = (on, label) => {
@@ -215,7 +230,12 @@ export function live() {
 
       function onStatus(s) {
         if (s.phase === "loading" || s.phase === "camera") setMsg(s.message);
-        if (s.phase === "live") { setMsg(""); setCam(true, "Camera live"); $("#camPlaceholder", root).hidden = true; }
+        if (s.phase === "live") {
+          setMsg(""); setCam(true, "Camera live"); $("#camPlaceholder", root).hidden = true;
+          const mb = $("#modelBadge", root); mb.textContent = "Model: ready"; mb.className = "badge good";
+          $("#teachBtn", root).disabled = false;
+          updateTaught();
+        }
         if (s.phase === "stopped") { setCam(false, "Camera off"); setMsg(""); $("#camPlaceholder", root).hidden = false; }
       }
 
@@ -225,6 +245,11 @@ export function live() {
         $("#confOut", root).textContent = conf + "%";
         $("#confBar", root).style.width = conf + "%";
         $("#detStatus", root).textContent = st.handVisible ? "Hand detected" : "No hand detected";
+        const hb = $("#handBadge", root);
+        hb.textContent = "Hand: " + (st.handVisible ? "detected" : "none");
+        hb.className = "badge " + (st.handVisible ? "good" : "warn");
+        if (st.frame) { recentFrames.push(st.frame); if (recentFrames.length > 12) recentFrames.shift(); }
+        else recentFrames.length = 0;
 
         if (st.sign) {
           const sign = store.getSign(st.sign);
@@ -290,9 +315,36 @@ export function live() {
         speak(word, { rate: store.getSettings().voiceRate, lang: store.getSettings().voiceLang });
       };
 
+      function updateTaught() {
+        const taught = store.trainedSigns().length;
+        const tb = $("#taughtBadge", root);
+        if (!tb) return;
+        tb.textContent = "Signs taught: " + taught;
+        tb.className = "badge " + (taught ? "good" : "warn");
+      }
+
+      $("#teachBtn", root).onclick = () => {
+        const name = $("#teachName", root).value.trim().toUpperCase();
+        const msg = $("#teachMsg", root);
+        if (!name) { msg.textContent = "Type a sign name first (for example HELLO)."; return; }
+        if (recentFrames.length < 3) { msg.textContent = "Hold your hand in view, then tap Capture."; return; }
+        const n = recentFrames.length;
+        const mean = new Float32Array(63);
+        for (const f of recentFrames) for (let i = 0; i < 63; i++) mean[i] += f[i] / n;
+        let sign = store.getSigns().find(s => s.name.toUpperCase() === name);
+        if (!sign) sign = store.addSign({ name, meaning: name, category: "Common Conversations", voiceText: name, type: "static" });
+        store.addSample(sign.id, Array.from(mean), "static");
+        if (session) session.rec.reload();
+        updateTaught();
+        const count = store.getSign(sign.id).samples.length;
+        msg.textContent = `Captured sample ${count} for ${name}. Keep holding it and tap again, or teach another sign.`;
+        toast(`Sample ${count} saved for ${name}`, "good");
+      };
+
       setCam(false, "Camera off");
+      updateTaught();
       if (!store.trainedSigns().length) {
-        setMsg("No signs taught yet — recognition will stay empty until you add samples in Admin → Train New Sign.");
+        setMsg("No signs taught yet — use “Teach a sign” on the right, or Admin → Train New Sign.");
       }
       return () => { try { session?.stop(); } catch {} stopSpeech(); };
     },
